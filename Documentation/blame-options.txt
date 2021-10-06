@@ -136,5 +136,17 @@ take effect.
 	option.  An empty file name, `""`, will clear the list of revs from
 	previously processed files.
 
+--color-lines::
+	Color lines differently, if they come from the same commit as the preceding line.
+	This facilitates distinguishing code blocks introduced by different commits.
+	The color defaults to cyan and be adjusted using the `color.blame.repeatedLines`
+	config option. Only the line annotation (see "The Default Format" section)
+	is colored.
+
+--color-by-age::
+	Color lines depending on the age of the line. The `color.blame.highlightRecent`
+	config option controls what color is used for which range of age. Only the
+	line annotation (see "The Default Format" section) is colored.
+
 -h::
 	Show help message.
