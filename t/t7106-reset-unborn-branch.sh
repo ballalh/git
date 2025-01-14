@@ -2,7 +2,6 @@
 
 test_description='git reset should work on unborn branch'
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 test_expect_success 'setup' '
@@ -34,7 +33,7 @@ test_expect_success 'reset $file' '
 	test_cmp expect actual
 '
 
-test_expect_success PERL 'reset -p' '
+test_expect_success 'reset -p' '
 	rm .git/index &&
 	git add a &&
 	echo y >yes &&

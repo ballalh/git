@@ -18,7 +18,8 @@ elif test true = "$GITLAB_CI"
 then
 	begin_group () {
 		need_to_end_group=t
-		printf "\e[0Ksection_start:$(date +%s):$(echo "$1" | tr ' ' _)\r\e[0K$1\n"
+		printf '\e[0Ksection_start:%s:%s[collapsed=true]\r\e[0K%s\n' \
+			"$(date +%s)" "$(echo "$1" | tr ' ' _)" "$1"
 		trap "end_group '$1'" EXIT
 		set -x
 	}
@@ -27,7 +28,8 @@ then
 		test -n "$need_to_end_group" || return 0
 		set +x
 		need_to_end_group=
-		printf "\e[0Ksection_end:$(date +%s):$(echo "$1" | tr ' ' _)\r\e[0K\n"
+		printf '\e[0Ksection_end:%s:%s\r\e[0K\n' \
+			"$(date +%s)" "$(echo "$1" | tr ' ' _)"
 		trap - EXIT
 	}
 else
@@ -55,14 +57,13 @@ group () {
 	return $res
 }
 
-begin_group "CI setup"
-trap "end_group 'CI setup'" EXIT
+begin_group "CI setup via $(basename $0)"
 
 # Set 'exit on error' for all CI scripts to let the caller know that
 # something went wrong.
 #
 # We already enabled tracing executed commands earlier. This helps by showing
-# how # environment variables are set and and dependencies are installed.
+# how # environment variables are set and dependencies are installed.
 set -e
 
 skip_branch_tip_with_tag () {
@@ -180,9 +181,9 @@ handle_failed_tests () {
 }
 
 create_failed_test_artifacts () {
-	mkdir -p t/failed-test-artifacts
+	mkdir -p "${TEST_OUTPUT_DIRECTORY:-t}"/failed-test-artifacts
 
-	for test_exit in t/test-results/*.exit
+	for test_exit in "${TEST_OUTPUT_DIRECTORY:-t}"/test-results/*.exit
 	do
 		test 0 != "$(cat "$test_exit")" || continue
 
@@ -191,11 +192,11 @@ create_failed_test_artifacts () {
 		printf "\\e[33m\\e[1m=== Failed test: ${test_name} ===\\e[m\\n"
 		echo "The full logs are in the 'print test failures' step below."
 		echo "See also the 'failed-tests-*' artifacts attached to this run."
-		cat "t/test-results/$test_name.markup"
+		cat "${TEST_OUTPUT_DIRECTORY:-t}/test-results/$test_name.markup"
 
-		trash_dir="t/trash directory.$test_name"
-		cp "t/test-results/$test_name.out" t/failed-test-artifacts/
-		tar czf t/failed-test-artifacts/"$test_name".trash.tar.gz "$trash_dir"
+		trash_dir="${TEST_OUTPUT_DIRECTORY:-t}/trash directory.$test_name"
+		cp "${TEST_OUTPUT_DIRECTORY:-t}/test-results/$test_name.out" "${TEST_OUTPUT_DIRECTORY:-t}"/failed-test-artifacts/
+		tar czf "${TEST_OUTPUT_DIRECTORY:-t}/failed-test-artifacts/$test_name.trash.tar.gz" "$trash_dir"
 	done
 }
 
@@ -236,7 +237,7 @@ then
 	CC="${CC_PACKAGE:-${CC:-gcc}}"
 	DONT_SKIP_TAGS=t
 	handle_failed_tests () {
-		echo "FAILED_TEST_ARTIFACTS=t/failed-test-artifacts" >>$GITHUB_ENV
+		echo "FAILED_TEST_ARTIFACTS=${TEST_OUTPUT_DIRECTORY:-t}/failed-test-artifacts" >>$GITHUB_ENV
 		create_failed_test_artifacts
 		return 1
 	}
@@ -250,11 +251,26 @@ then
 	CI_TYPE=gitlab-ci
 	CI_BRANCH="$CI_COMMIT_REF_NAME"
 	CI_COMMIT="$CI_COMMIT_SHA"
-	case "$CI_JOB_IMAGE" in
-	macos-*)
-		CI_OS_NAME=osx;;
-	alpine:*|fedora:*|ubuntu:*)
-		CI_OS_NAME=linux;;
+
+	case "$OS,$CI_JOB_IMAGE" in
+	Windows_NT,*)
+		CI_OS_NAME=windows
+		JOBS=$NUMBER_OF_PROCESSORS
+		;;
+	*,macos-*)
+		# GitLab CI has Python installed via multiple package managers,
+		# most notably via asdf and Homebrew. Ensure that our builds
+		# pick up the Homebrew one by prepending it to our PATH as the
+		# asdf one breaks tests.
+		export PATH="$(brew --prefix)/bin:$PATH"
+
+		CI_OS_NAME=osx
+		JOBS=$(nproc)
+		;;
+	*,alpine:*|*,fedora:*|*,ubuntu:*)
+		CI_OS_NAME=linux
+		JOBS=$(nproc)
+		;;
 	*)
 		echo "Could not identify OS image" >&2
 		env >&2
@@ -265,6 +281,7 @@ then
 	CI_JOB_ID="$CI_JOB_ID"
 	CC="${CC_PACKAGE:-${CC:-gcc}}"
 	DONT_SKIP_TAGS=t
+
 	handle_failed_tests () {
 		create_failed_test_artifacts
 		return 1
@@ -272,8 +289,7 @@ then
 
 	cache_dir="$HOME/none"
 
-	runs_on_pool=$(echo "$CI_JOB_IMAGE" | tr : -)
-	JOBS=$(nproc)
+	distro=$(echo "$CI_JOB_IMAGE" | tr : -)
 else
 	echo "Could not identify CI type" >&2
 	env >&2
@@ -311,21 +327,32 @@ export DEFAULT_TEST_TARGET=prove
 export GIT_TEST_CLONE_2GB=true
 export SKIP_DASHED_BUILT_INS=YesPlease
 
-case "$runs_on_pool" in
+case "$distro" in
 ubuntu-*)
 	if test "$jobname" = "linux-gcc-default"
 	then
 		break
 	fi
 
-	PYTHON_PACKAGE=python2
-	if test "$jobname" = linux-gcc
+	# Python 2 is end of life, and Ubuntu 23.04 and newer don't actually
+	# have it anymore. We thus only test with Python 2 on older LTS
+	# releases.
+	if test "$distro" = "ubuntu-20.04"
 	then
+		PYTHON_PACKAGE=python2
+	else
 		PYTHON_PACKAGE=python3
 	fi
 	MAKEFLAGS="$MAKEFLAGS PYTHON_PATH=/usr/bin/$PYTHON_PACKAGE"
 
-	export GIT_TEST_HTTPD=true
+	case "$distro" in
+	ubuntu-16.04)
+		# Apache is too old for HTTP/2.
+		;;
+	*)
+		export GIT_TEST_HTTPD=true
+		;;
+	esac
 
 	# The Linux build installs the defined dependency versions below.
 	# The OS X build installs much more recent versions, whichever
@@ -333,10 +360,6 @@ ubuntu-*)
 	# image.
 	# Keep that in mind when you encounter a broken OS X build!
 	export LINUX_GIT_LFS_VERSION="1.5.2"
-
-	P4_PATH="$HOME/custom/p4"
-	GIT_LFS_PATH="$HOME/custom/git-lfs"
-	export PATH="$GIT_LFS_PATH:$P4_PATH:$PATH"
 	;;
 macos-*)
 	MAKEFLAGS="$MAKEFLAGS PYTHON_PATH=$(which python3)"
@@ -346,6 +369,9 @@ macos-*)
 	fi
 	;;
 esac
+
+CUSTOM_PATH="${CUSTOM_PATH:-$HOME/path}"
+export PATH="$CUSTOM_PATH:$PATH"
 
 case "$jobname" in
 linux32)
@@ -357,10 +383,8 @@ linux-musl)
 	MAKEFLAGS="$MAKEFLAGS NO_REGEX=Yes ICONV_OMITS_BOM=Yes"
 	MAKEFLAGS="$MAKEFLAGS GIT_TEST_UTF8_LOCALE=C.UTF-8"
 	;;
-linux-leaks)
+linux-leaks|linux-reftable-leaks)
 	export SANITIZE=leak
-	export GIT_TEST_PASSING_SANITIZE_LEAK=true
-	export GIT_TEST_SANITIZE_LEAK_LOG=true
 	;;
 linux-asan-ubsan)
 	export SANITIZE=address,undefined
@@ -371,5 +395,5 @@ esac
 
 MAKEFLAGS="$MAKEFLAGS CC=${CC:-cc}"
 
-end_group "CI setup"
+end_group "CI setup via $(basename $0)"
 set -x

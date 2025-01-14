@@ -5,7 +5,6 @@ test_description='miscellaneous basic tests for cherry-pick and revert'
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
 export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 test_expect_success setup '
@@ -104,11 +103,19 @@ test_expect_success 'revert forbidden on dirty working tree' '
 '
 
 test_expect_success 'cherry-pick on unborn branch' '
-	git checkout --orphan unborn &&
+	git switch --orphan unborn &&
 	git rm --cached -r . &&
-	rm -rf * &&
 	git cherry-pick initial &&
-	git diff --quiet initial &&
+	git diff --exit-code initial &&
+	test_cmp_rev ! initial HEAD
+'
+
+test_expect_success 'cherry-pick on unborn branch with --allow-empty' '
+	git checkout --detach &&
+	git branch -D unborn &&
+	git switch --orphan unborn &&
+	git cherry-pick initial --allow-empty &&
+	git diff --exit-code initial &&
 	test_cmp_rev ! initial HEAD
 '
 
@@ -170,6 +177,7 @@ test_expect_success 'advice from failed revert' '
 	hint: You can instead skip this commit with "git revert --skip".
 	hint: To abort and get back to the state before "git revert",
 	hint: run "git revert --abort".
+	hint: Disable this message with "git config set advice.mergeConflict false"
 	EOF
 	test_commit --append --no-tag "double-add dream" dream dream &&
 	test_must_fail git revert HEAD^ 2>actual &&
@@ -216,6 +224,20 @@ test_expect_success 'identification of reverted commit (--reference)' '
 	git cat-file commit HEAD >actual.raw &&
 	grep "^This reverts " actual.raw >actual &&
 	echo "This reverts commit $(git show -s --pretty=reference HEAD^)." >expect &&
+	test_cmp expect actual
+'
+
+test_expect_success 'git revert --reference with core.commentChar' '
+	test_when_finished "git reset --hard to-ident" &&
+	git checkout --detach to-ident &&
+	GIT_EDITOR="head -n4 >actual" git -c core.commentChar=% revert \
+		--edit --reference HEAD &&
+	cat <<-EOF >expect &&
+	% *** SAY WHY WE ARE REVERTING ON THE TITLE LINE ***
+
+	This reverts commit $(git show -s --pretty=reference HEAD^).
+
+	EOF
 	test_cmp expect actual
 '
 

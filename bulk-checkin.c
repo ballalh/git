@@ -1,6 +1,10 @@
 /*
  * Copyright (c) 2011, Google Inc.
  */
+
+#define USE_THE_REPOSITORY_VARIABLE
+#define DISABLE_SIGN_COMPARE_WARNINGS
+
 #include "git-compat-util.h"
 #include "bulk-checkin.h"
 #include "environment.h"
@@ -11,7 +15,6 @@
 #include "csum-file.h"
 #include "pack.h"
 #include "strbuf.h"
-#include "string-list.h"
 #include "tmp-objdir.h"
 #include "packfile.h"
 #include "object-file.h"
@@ -59,6 +62,7 @@ static void flush_bulk_checkin_packfile(struct bulk_checkin_packfile *state)
 
 	if (state->nr_written == 0) {
 		close(state->f->fd);
+		free_hashfile(state->f);
 		unlink(state->pack_tmp_name);
 		goto clear_exit;
 	} else if (state->nr_written == 1) {
@@ -72,7 +76,7 @@ static void flush_bulk_checkin_packfile(struct bulk_checkin_packfile *state)
 		close(fd);
 	}
 
-	strbuf_addf(&packname, "%s/pack/pack-%s.", get_object_directory(),
+	strbuf_addf(&packname, "%s/pack/pack-%s.", repo_get_object_directory(the_repository),
 		    hash_to_hex(hash));
 	finish_tmp_packfile(&packname, state->pack_tmp_name,
 			    state->written, state->nr_written,
@@ -81,6 +85,7 @@ static void flush_bulk_checkin_packfile(struct bulk_checkin_packfile *state)
 		free(state->written[i]);
 
 clear_exit:
+	free(state->pack_tmp_name);
 	free(state->written);
 	memset(state, 0, sizeof(*state));
 
@@ -109,7 +114,7 @@ static void flush_batch_fsync(void)
 	 * to ensure that the data in each new object file is durable before
 	 * the final name is visible.
 	 */
-	strbuf_addf(&temp_path, "%s/bulk_fsync_XXXXXX", get_object_directory());
+	strbuf_addf(&temp_path, "%s/bulk_fsync_XXXXXX", repo_get_object_directory(the_repository));
 	temp = xmks_tempfile(temp_path.buf);
 	fsync_or_die(get_tempfile_fd(temp), get_tempfile_path(temp));
 	delete_tempfile(&temp);
@@ -267,7 +272,7 @@ static int deflate_blob_to_pack(struct bulk_checkin_packfile *state,
 					  OBJ_BLOB, size);
 	the_hash_algo->init_fn(&ctx);
 	the_hash_algo->update_fn(&ctx, obuf, header_len);
-	the_hash_algo->init_fn(&checkpoint.ctx);
+	the_hash_algo->unsafe_init_fn(&checkpoint.ctx);
 
 	/* Note: idx is non-NULL when we are writing */
 	if ((flags & HASH_WRITE_OBJECT) != 0)

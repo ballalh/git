@@ -2,7 +2,6 @@
 
 test_description='git bugreport'
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 test_expect_success 'create a report' '
@@ -39,9 +38,9 @@ test_expect_success 'sanity check "System Info" section' '
 
 	sed -ne "/^\[System Info\]$/,/^$/p" <git-bugreport-format.txt >system &&
 
-	# The beginning should match "git version --build-info" verbatim,
+	# The beginning should match "git version --build-options" verbatim,
 	# but rather than checking bit-for-bit equality, just test some basics.
-	grep "git version [0-9]." system &&
+	grep "git version " system &&
 	grep "shell-path: ." system &&
 
 	# After the version, there should be some more info.

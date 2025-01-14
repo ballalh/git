@@ -234,7 +234,7 @@ from the template during repository creation, usually installed in
 configuration variable, but the file takes precedence.
 
 category (or `gitweb.category`)::
-	Singe line category of a project, used to group projects if
+	Single line category of a project, used to group projects if
 	`$projects_list_group_categories` is enabled.  By default (file and
 	configuration variable absent), uncategorized projects are put in the
 	`$project_list_default_category` category.  You can use the
@@ -305,7 +305,7 @@ pathnames.  In most general form such path_info (component) based gitweb URL
 looks like this:
 
 -----------------------------------------------------------------------
-.../gitweb.cgi/<repo>/<action>/<revision_from>:/<path_from>..<revision_to>:/<path_to>?<arguments>
+.../gitweb.cgi/<repo>/<action>/<revision-from>:/<path-from>..<revision-to>:/<path-to>?<arguments>
 -----------------------------------------------------------------------
 
 

@@ -4,7 +4,6 @@ test_description='basic clone options'
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
 export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 test_expect_success 'setup' '
@@ -120,14 +119,14 @@ test_expect_success 'prefers -c config over --template config' '
 
 '
 
-test_expect_failure 'prefers --template config even for core.bare' '
+test_expect_success 'ignore --template config for core.bare' '
 
 	template="$TRASH_DIRECTORY/template-with-bare-config" &&
 	mkdir "$template" &&
 	git config --file "$template/config" core.bare true &&
 	git clone "--template=$template" parent clone-bare-config &&
-	test "$(git -C clone-bare-config config --local core.bare)" = "true" &&
-	test_path_is_file clone-bare-config/HEAD
+	test "$(git -C clone-bare-config config --local core.bare)" = "false" &&
+	test_path_is_missing clone-bare-config/HEAD
 '
 
 test_expect_success 'prefers config "clone.defaultRemoteName" over default' '

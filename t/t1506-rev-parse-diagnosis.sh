@@ -7,7 +7,6 @@ exec </dev/null
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
 export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 test_did_you_mean ()
@@ -195,7 +194,7 @@ test_expect_success 'dotdot is not an empty set' '
 '
 
 test_expect_success 'dotdot does not peel endpoints' '
-	git tag -a -m "annote" annotated HEAD &&
+	git tag -a -m "annotate" annotated HEAD &&
 	A=$(git rev-parse annotated) &&
 	H=$(git rev-parse annotated^0) &&
 	{

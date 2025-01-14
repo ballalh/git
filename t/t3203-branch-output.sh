@@ -1,6 +1,7 @@
 #!/bin/sh
 
 test_description='git branch display tests'
+
 . ./test-lib.sh
 . "$TEST_DIRECTORY"/lib-terminal.sh
 

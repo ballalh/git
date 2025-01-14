@@ -4,7 +4,6 @@ test_description='checkout into detached HEAD state'
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
 export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 check_detached () {
@@ -44,6 +43,18 @@ test_expect_success 'checkout branch does not detach' '
 	git checkout branch &&
 	check_not_detached
 '
+
+for opt in "HEAD" "@"
+do
+	test_expect_success "checkout $opt no-op/don't detach" '
+		reset &&
+		cat .git/HEAD >expect &&
+		git checkout $opt &&
+		cat .git/HEAD >actual &&
+		check_not_detached &&
+		test_cmp expect actual
+	'
+done
 
 test_expect_success 'checkout tag detaches' '
 	reset &&
@@ -164,7 +175,10 @@ test_expect_success 'tracking count is accurate after orphan check' '
 	git config branch.child.merge refs/heads/main &&
 	git checkout child^ &&
 	git checkout child >stdout &&
-	test_cmp expect stdout
+	test_cmp expect stdout &&
+
+	git checkout --detach child >stdout &&
+	test_grep ! "can be fast-forwarded\." stdout
 '
 
 test_expect_success 'no advice given for explicit detached head state' '

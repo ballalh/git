@@ -1,3 +1,6 @@
+#define USE_THE_REPOSITORY_VARIABLE
+#define DISABLE_SIGN_COMPARE_WARNINGS
+
 #include "builtin.h"
 #include "config.h"
 #include "commit.h"
@@ -7,13 +10,11 @@
 #include "hex.h"
 #include "revision.h"
 #include "list-objects.h"
-#include "list-objects-filter.h"
 #include "list-objects-filter-options.h"
 #include "object.h"
 #include "object-name.h"
 #include "object-file.h"
 #include "object-store-ll.h"
-#include "pack.h"
 #include "pack-bitmap.h"
 #include "log-tree.h"
 #include "graph.h"
@@ -122,7 +123,7 @@ static inline void finish_object__ma(struct object *obj)
 		return;
 
 	case MA_ALLOW_PROMISOR:
-		if (is_promisor_object(&obj->oid))
+		if (is_promisor_object(the_repository, &obj->oid))
 			return;
 		die("unexpected missing %s object '%s'",
 		    type_name(obj->type), oid_to_hex(&obj->oid));
@@ -221,6 +222,7 @@ static void show_commit(struct commit *commit, void *data)
 		ctx.fmt = revs->commit_format;
 		ctx.output_encoding = get_log_output_encoding();
 		ctx.color = revs->diffopt.use_color;
+		ctx.rev = revs;
 		pretty_print_commit(&ctx, commit, &buf);
 		if (buf.len) {
 			if (revs->commit_format != CMIT_FMT_ONELINE)
@@ -485,6 +487,13 @@ static int try_bitmap_traversal(struct rev_info *revs,
 	if (revs->max_count >= 0)
 		return -1;
 
+	/*
+	 * We can't know which commits were left/right in a single traversal,
+	 * and we don't yet know how to traverse them separately.
+	 */
+	if (revs->left_right)
+		return -1;
+
 	bitmap_git = prepare_bitmap_walk(revs, filter_provided_objects);
 	if (!bitmap_git)
 		return -1;
@@ -509,10 +518,15 @@ static int try_bitmap_disk_usage(struct rev_info *revs,
 
 	size_from_bitmap = get_disk_usage_from_bitmap(bitmap_git, revs);
 	print_disk_usage(size_from_bitmap);
+
+	free_bitmap_index(bitmap_git);
 	return 0;
 }
 
-int cmd_rev_list(int argc, const char **argv, const char *prefix)
+int cmd_rev_list(int argc,
+		 const char **argv,
+		 const char *prefix,
+		 struct repository *repo UNUSED)
 {
 	struct rev_info revs;
 	struct rev_list_info info;
@@ -546,6 +560,18 @@ int cmd_rev_list(int argc, const char **argv, const char *prefix)
 	 * objects.
 	 *
 	 * Let "--missing" to conditionally set fetch_if_missing.
+	 */
+	/*
+	 * NEEDSWORK: These loops that attempt to find presence of
+	 * options without understanding that the options they are
+	 * skipping are broken (e.g., it would not know "--grep
+	 * --exclude-promisor-objects" is not triggering
+	 * "--exclude-promisor-objects" option).  We really need
+	 * setup_revisions() to have a mechanism to allow and disallow
+	 * some sets of options for different commands (like rev-list,
+	 * replay, etc). Such a mechanism should do an early parsing
+	 * of options and be able to manage the `--missing=...` and
+	 * `--exclude-promisor-objects` options below.
 	 */
 	for (i = 1; i < argc; i++) {
 		const char *arg = argv[i];
@@ -755,8 +781,12 @@ int cmd_rev_list(int argc, const char **argv, const char *prefix)
 
 	if (arg_print_omitted)
 		oidset_init(&omitted_objects, DEFAULT_OIDSET_SIZE);
-	if (arg_missing_action == MA_PRINT)
+	if (arg_missing_action == MA_PRINT) {
 		oidset_init(&missing_objects, DEFAULT_OIDSET_SIZE);
+		/* Add missing tips */
+		oidset_insert_from_set(&missing_objects, &revs.missing_commits);
+		oidset_clear(&revs.missing_commits);
+	}
 
 	traverse_commit_list_filtered(
 		&revs, show_commit, show_object, &info,

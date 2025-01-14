@@ -81,9 +81,6 @@ you will.
 Here are the rules regarding the "flags" that you should follow when you are
 scripting Git:
 
- * It's preferred to use the non-dashed form of Git commands, which means that
-   you should prefer `git foo` to `git-foo`.
-
  * Splitting short options to separate words (prefer `git foo -a -b`
    to `git foo -ab`, the latter may not even work).
 
@@ -92,6 +89,15 @@ scripting Git:
    options, and `git foo --long-opt=Arg` instead of `git foo --long-opt Arg`
    for long options.  An option that takes optional option-argument must be
    written in the 'stuck' form.
+
+ * Despite the above suggestion, when Arg is a path relative to the
+   home directory of a user, e.g. `~/directory/file` or `~u/d/f`, you
+   may want to use the separate form, e.g. `git foo --file ~/mine`,
+   not `git foo --file=~/mine`.  The shell will expand `~/` in the
+   former to your home directory, but most shells keep the tilde in
+   the latter.  Some of our commands know how to tilde-expand the
+   option value even when given in the stuck form, but not all of
+   them do.
 
  * When you give a revision parameter to a command, make sure the parameter is
    not ambiguous with a name of a file in the work tree.  E.g. do not write

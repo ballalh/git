@@ -1,6 +1,7 @@
 #!/bin/sh
 
 test_description='git mv in subdirs'
+
 . ./test-lib.sh
 . "$TEST_DIRECTORY"/lib-diff-data.sh
 
@@ -547,6 +548,18 @@ test_expect_success 'moving nested submodules' '
 	git submodule update --init --recursive &&
 	git mv nested_move sub_nested_moved &&
 	git status
+'
+
+test_expect_failure 'nonsense mv triggers assertion failure and partially updated index' '
+	test_when_finished git reset --hard HEAD &&
+	git reset --hard HEAD &&
+	mkdir -p a &&
+	mkdir -p b &&
+	>a/a.txt &&
+	git add a/a.txt &&
+	test_must_fail git mv a/a.txt a b &&
+	git status --porcelain >actual &&
+	grep "^A[ ]*a/a.txt$" actual
 '
 
 test_done

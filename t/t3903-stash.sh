@@ -200,7 +200,7 @@ test_expect_success 'drop stash reflog updates refs/stash' '
 	test_cmp expect actual
 '
 
-test_expect_success REFFILES 'drop stash reflog updates refs/stash with rewrite' '
+test_expect_success 'drop stash reflog updates refs/stash with rewrite' '
 	git init repo &&
 	(
 		cd repo &&
@@ -213,16 +213,16 @@ test_expect_success REFFILES 'drop stash reflog updates refs/stash with rewrite'
 	new_oid="$(git -C repo rev-parse stash@{0})" &&
 
 	cat >expect <<-EOF &&
-	$(test_oid zero) $old_oid
-	$old_oid $new_oid
+	$new_oid
+	$old_oid
 	EOF
-	cut -d" " -f1-2 repo/.git/logs/refs/stash >actual &&
+	git -C repo reflog show refs/stash --format=%H >actual &&
 	test_cmp expect actual &&
 
 	git -C repo stash drop stash@{1} &&
-	cut -d" " -f1-2 repo/.git/logs/refs/stash >actual &&
+	git -C repo reflog show refs/stash --format=%H >actual &&
 	cat >expect <<-EOF &&
-	$(test_oid zero) $new_oid
+	$new_oid
 	EOF
 	test_cmp expect actual
 '
@@ -391,6 +391,15 @@ test_expect_success 'stash --staged' '
 	git reset --hard &&
 	git stash pop &&
 	test bar,bar4 = $(cat file),$(cat file2)
+'
+
+test_expect_success 'stash --staged with binary file' '
+	printf "\0" >file &&
+	git add file &&
+	git stash --staged &&
+	git stash pop &&
+	printf "\0" >expect &&
+	test_cmp expect file
 '
 
 test_expect_success 'dont assume push with non-option args' '
@@ -1388,6 +1397,21 @@ test_expect_success 'stash --keep-index with file deleted in index does not resu
 	test_path_is_missing to-remove
 '
 
+test_expect_success 'stash --keep-index --include-untracked with empty tree' '
+	test_when_finished "rm -rf empty" &&
+	git init empty &&
+	(
+		cd empty &&
+		git commit --allow-empty --message "empty" &&
+		echo content >file &&
+		git stash push --keep-index --include-untracked &&
+		test_path_is_missing file &&
+		git stash pop &&
+		echo content >expect &&
+		test_cmp expect file
+	)
+'
+
 test_expect_success 'stash apply should succeed with unmodified file' '
 	echo base >file &&
 	git add file &&
@@ -1513,6 +1537,58 @@ test_expect_success 'restore untracked files even when we hit conflicts' '
 		test_must_fail git stash pop &&
 
 		test_path_is_file c
+	)
+'
+
+test_expect_success 'stash create reports a locked index' '
+	test_when_finished "rm -rf repo" &&
+	git init repo &&
+	(
+		cd repo &&
+		test_commit A A.file &&
+		echo change >A.file &&
+		touch .git/index.lock &&
+
+		cat >expect <<-EOF &&
+		error: could not write index
+		EOF
+		test_must_fail git stash create 2>err &&
+		test_cmp expect err
+	)
+'
+
+test_expect_success 'stash push reports a locked index' '
+	test_when_finished "rm -rf repo" &&
+	git init repo &&
+	(
+		cd repo &&
+		test_commit A A.file &&
+		echo change >A.file &&
+		touch .git/index.lock &&
+
+		cat >expect <<-EOF &&
+		error: could not write index
+		EOF
+		test_must_fail git stash push 2>err &&
+		test_cmp expect err
+	)
+'
+
+test_expect_success 'stash apply reports a locked index' '
+	test_when_finished "rm -rf repo" &&
+	git init repo &&
+	(
+		cd repo &&
+		test_commit A A.file &&
+		echo change >A.file &&
+		git stash push &&
+		touch .git/index.lock &&
+
+		cat >expect <<-EOF &&
+		error: could not write index
+		EOF
+		test_must_fail git stash apply 2>err &&
+		test_cmp expect err
 	)
 '
 

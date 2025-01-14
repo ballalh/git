@@ -2,7 +2,6 @@
 
 test_description='diff --no-index'
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 test_expect_success 'setup' '
@@ -203,6 +202,18 @@ test_expect_success POSIXPERM,SYMLINKS 'diff --no-index normalizes: mode not lik
 	EOF
 	test_expect_code 1 git -c core.abbrev=no diff --no-index x z >actual &&
 	test_cmp expected actual
+'
+
+test_expect_success POSIXPERM 'external diff with mode-only change' '
+	echo content >not-executable &&
+	echo content >executable &&
+	chmod +x executable &&
+	echo executable executable $(test_oid zero) 100755 \
+		not-executable $(test_oid zero) 100644 not-executable \
+		>expect &&
+	test_expect_code 1 git -c diff.external=echo diff \
+		--no-index executable not-executable >actual &&
+	test_cmp expect actual
 '
 
 test_expect_success "diff --no-index treats '-' as stdin" '

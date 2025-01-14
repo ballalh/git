@@ -1,3 +1,6 @@
+#define USE_THE_REPOSITORY_VARIABLE
+#define DISABLE_SIGN_COMPARE_WARNINGS
+
 #include "test-tool.h"
 #include "strvec.h"
 #include "run-command.h"
@@ -24,6 +27,7 @@ static int get_i(int *p_value, const char *data)
 	if (!data || !*data)
 		return MyError;
 
+	errno = 0;
 	*p_value = strtol(data, &endptr, 10);
 	if (*endptr || errno == ERANGE)
 		return MyError;

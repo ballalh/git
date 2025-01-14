@@ -3,9 +3,8 @@
 # Copyright (c) 2005 Junio C Hamano
 #
 
-test_description='Test rename detection in diff engine.
+test_description='Test rename detection in diff engine.'
 
-'
 . ./test-lib.sh
 . "$TEST_DIRECTORY"/lib-diff.sh
 
@@ -284,6 +283,30 @@ test_expect_success 'basename similarity vs best similarity' '
 	R078	subdir/file.txt	file.txt
 	EOF
 	test_cmp expected actual
+'
+
+test_expect_success 'last line matters too' '
+	{
+		test_write_lines a 0 1 2 3 4 5 6 7 8 9 &&
+		printf "git ignores final up to 63 characters if not newline terminated"
+	} >no-final-lf &&
+	git add no-final-lf &&
+	git commit -m "original version of file with no final newline" &&
+
+	# Change ONLY the first character of the whole file
+	{
+		test_write_lines b 0 1 2 3 4 5 6 7 8 9 &&
+		printf "git ignores final up to 63 characters if not newline terminated"
+	} >no-final-lf &&
+	git add no-final-lf &&
+	git mv no-final-lf still-absent-final-lf &&
+	git commit -a -m "rename no-final-lf -> still-absent-final-lf" &&
+	git diff-tree -r -M --name-status HEAD^ HEAD >actual &&
+	sed -e "s/^R[0-9]*	/R	/" actual >actual.munged &&
+	cat >expected <<-\EOF &&
+	R	no-final-lf	still-absent-final-lf
+	EOF
+	test_cmp expected actual.munged
 '
 
 test_done

@@ -1,6 +1,7 @@
 #!/bin/sh
 
 test_description='test labels in pathspecs'
+
 . ./test-lib.sh
 
 test_expect_success 'setup a tree' '
@@ -390,6 +391,33 @@ test_expect_success 'reading from .gitattributes in a subdirectory (2)' '
 test_expect_success 'reading from .gitattributes in a subdirectory (3)' '
 	git ls-files ":(attr:label1)sub/" >actual &&
 	test_write_lines "sub/fileSetLabel" >expect &&
+	test_cmp expect actual
+'
+
+test_expect_success POSIXPERM 'pathspec with builtin_objectmode attr can be used' '
+	>mode_exec_file_1 &&
+
+	git status -s ":(attr:builtin_objectmode=100644)mode_exec_*" >actual &&
+	echo ?? mode_exec_file_1 >expect &&
+	test_cmp expect actual &&
+
+	git add mode_exec_file_1 &&
+	chmod +x mode_exec_file_1 &&
+	git status -s ":(attr:builtin_objectmode=100755)mode_exec_*" >actual &&
+	echo AM mode_exec_file_1 >expect &&
+	test_cmp expect actual
+'
+
+test_expect_success POSIXPERM 'builtin_objectmode attr can be excluded' '
+	>mode_1_regular &&
+	>mode_1_exec  &&
+	chmod +x mode_1_exec &&
+	git status -s ":(exclude,attr:builtin_objectmode=100644)" "mode_1_*" >actual &&
+	echo ?? mode_1_exec >expect &&
+	test_cmp expect actual &&
+
+	git status -s ":(exclude,attr:builtin_objectmode=100755)" "mode_1_*" >actual &&
+	echo ?? mode_1_regular >expect &&
 	test_cmp expect actual
 '
 

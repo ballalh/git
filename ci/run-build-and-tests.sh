@@ -17,6 +17,7 @@ linux-gcc)
 	export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
 	;;
 linux-TEST-vars)
+	export OPENSSL_SHA1_UNSAFE=YesPlease
 	export GIT_TEST_SPLIT_INDEX=yes
 	export GIT_TEST_MERGE_ALGORITHM=recursive
 	export GIT_TEST_FULL_IN_PACK_ARRAY=true
@@ -25,7 +26,7 @@ linux-TEST-vars)
 	export GIT_TEST_COMMIT_GRAPH=1
 	export GIT_TEST_COMMIT_GRAPH_CHANGED_PATHS=1
 	export GIT_TEST_MULTI_PACK_INDEX=1
-	export GIT_TEST_MULTI_PACK_INDEX_WRITE_BITMAP=1
+	export GIT_TEST_MULTI_PACK_INDEX_WRITE_INCREMENTAL=1
 	export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=master
 	export GIT_TEST_NO_WRITE_REV_INDEX=1
 	export GIT_TEST_CHECKOUT_WORKERS=2
@@ -37,6 +38,9 @@ linux-clang)
 linux-sha256)
 	export GIT_TEST_DEFAULT_HASH=sha256
 	;;
+linux-reftable|linux-reftable-leaks|osx-reftable)
+	export GIT_TEST_DEFAULT_REF_FORMAT=reftable
+	;;
 pedantic)
 	# Don't run the tests; we only care about whether Git can be
 	# built.
@@ -45,14 +49,29 @@ pedantic)
 	;;
 esac
 
-group Build make
-if test -n "$run_tests"
-then
-	group "Run tests" make test ||
-	handle_failed_tests
-	group "Run unit tests" \
-		make DEFAULT_UNIT_TEST_TARGET=unit-tests-prove unit-tests
-fi
-check_unignored_build_artifacts
+case "$jobname" in
+*-meson)
+	group "Configure" meson setup build . \
+		--warnlevel 2 --werror \
+		--wrap-mode nofallback
+	group "Build" meson compile -C build --
+	if test -n "$run_tests"
+	then
+		group "Run tests" meson test -C build --print-errorlogs --test-args="$GIT_TEST_OPTS" || (
+			./t/aggregate-results.sh "${TEST_OUTPUT_DIRECTORY:-t}/test-results"
+			handle_failed_tests
+		)
+	fi
+	;;
+*)
+	group Build make
+	if test -n "$run_tests"
+	then
+		group "Run tests" make test ||
+		handle_failed_tests
+	fi
+	;;
+esac
 
+check_unignored_build_artifacts
 save_good_tree

@@ -25,6 +25,12 @@ test_expect_success 'setup repository' '
 	git commit -m two
 '
 
+test_expect_success 'packfile without repository does not crash' '
+	echo "fatal: not a git repository" >expect &&
+	test_must_fail nongit git http-fetch --packfile=abc 2>err &&
+	test_cmp expect err
+'
+
 setup_post_update_server_info_hook () {
 	test_hook --setup -C "$1" post-update <<-\EOF &&
 	exec git update-server-info
@@ -52,6 +58,21 @@ test_expect_success 'list refs from outside any repository' '
 	$(git rev-parse main)	refs/heads/main
 	EOF
 	nongit git ls-remote "$HTTPD_URL/dumb/repo.git" >actual &&
+	test_cmp expect actual
+'
+
+
+test_expect_success 'list detached HEAD from outside any repository' '
+	git clone --mirror "$HTTPD_DOCUMENT_ROOT_PATH/repo.git" \
+		"$HTTPD_DOCUMENT_ROOT_PATH/repo-detached.git" &&
+	git -C "$HTTPD_DOCUMENT_ROOT_PATH/repo-detached.git" \
+		update-ref --no-deref HEAD refs/heads/main &&
+	git -C "$HTTPD_DOCUMENT_ROOT_PATH/repo-detached.git" update-server-info &&
+	cat >expect <<-EOF &&
+	$(git rev-parse main)	HEAD
+	$(git rev-parse main)	refs/heads/main
+	EOF
+	nongit git ls-remote "$HTTPD_URL/dumb/repo-detached.git" >actual &&
 	test_cmp expect actual
 '
 
@@ -90,13 +111,13 @@ test_expect_success 'http auth can use user/pass in URL' '
 test_expect_success 'http auth can use just user in URL' '
 	set_askpass wrong pass@host &&
 	git clone "$HTTPD_URL_USER/auth/dumb/repo.git" clone-auth-pass &&
-	expect_askpass pass user@host
+	expect_askpass pass user%40host
 '
 
 test_expect_success 'http auth can request both user and pass' '
 	set_askpass user@host pass@host &&
 	git clone "$HTTPD_URL/auth/dumb/repo.git" clone-auth-both &&
-	expect_askpass both user@host
+	expect_askpass both user%40host
 '
 
 test_expect_success 'http auth respects credential helper config' '
@@ -114,14 +135,14 @@ test_expect_success 'http auth can get username from config' '
 	test_config_global "credential.$HTTPD_URL.username" user@host &&
 	set_askpass wrong pass@host &&
 	git clone "$HTTPD_URL/auth/dumb/repo.git" clone-auth-user &&
-	expect_askpass pass user@host
+	expect_askpass pass user%40host
 '
 
 test_expect_success 'configured username does not override URL' '
 	test_config_global "credential.$HTTPD_URL.username" wrong &&
 	set_askpass wrong pass@host &&
 	git clone "$HTTPD_URL_USER/auth/dumb/repo.git" clone-auth-user2 &&
-	expect_askpass pass user@host
+	expect_askpass pass user%40host
 '
 
 test_expect_success 'set up repo with http submodules' '
@@ -142,7 +163,7 @@ test_expect_success 'cmdline credential config passes to submodule via clone' '
 	set_askpass wrong pass@host &&
 	git -c "credential.$HTTPD_URL.username=user@host" \
 		clone --recursive super super-clone &&
-	expect_askpass pass user@host
+	expect_askpass pass user%40host
 '
 
 test_expect_success 'cmdline credential config passes submodule via fetch' '
@@ -153,7 +174,7 @@ test_expect_success 'cmdline credential config passes submodule via fetch' '
 	git -C super-clone \
 	    -c "credential.$HTTPD_URL.username=user@host" \
 	    fetch --recurse-submodules &&
-	expect_askpass pass user@host
+	expect_askpass pass user%40host
 '
 
 test_expect_success 'cmdline credential config passes submodule update' '
@@ -170,7 +191,7 @@ test_expect_success 'cmdline credential config passes submodule update' '
 	git -C super-clone \
 	    -c "credential.$HTTPD_URL.username=user@host" \
 	    submodule update &&
-	expect_askpass pass user@host
+	expect_askpass pass user%40host
 '
 
 test_expect_success 'fetch changes via http' '
@@ -285,6 +306,14 @@ test_expect_success 'fetch notices corrupt idx' '
 	)
 '
 
+# usage: count_fetches <nr> <extension> <trace_file>
+count_fetches () {
+	# ignore grep exit code; it may return non-zero if we are expecting no
+	# matches
+	grep "GET .*objects/pack/pack-[a-z0-9]*.$2" "$3" >trace.count
+	test_line_count = "$1" trace.count
+}
+
 test_expect_success 'fetch can handle previously-fetched .idx files' '
 	git checkout --orphan branch1 &&
 	echo base >file &&
@@ -299,8 +328,14 @@ test_expect_success 'fetch can handle previously-fetched .idx files' '
 	git push "$HTTPD_DOCUMENT_ROOT_PATH"/repo_packed_branches.git branch2 &&
 	git --git-dir="$HTTPD_DOCUMENT_ROOT_PATH"/repo_packed_branches.git repack -d &&
 	git --bare init clone_packed_branches.git &&
-	git --git-dir=clone_packed_branches.git fetch "$HTTPD_URL"/dumb/repo_packed_branches.git branch1:branch1 &&
-	git --git-dir=clone_packed_branches.git fetch "$HTTPD_URL"/dumb/repo_packed_branches.git branch2:branch2
+	GIT_TRACE_CURL=$PWD/one.trace git --git-dir=clone_packed_branches.git \
+		fetch "$HTTPD_URL"/dumb/repo_packed_branches.git branch1:branch1 &&
+	count_fetches 2 idx one.trace &&
+	count_fetches 1 pack one.trace &&
+	GIT_TRACE_CURL=$PWD/two.trace git --git-dir=clone_packed_branches.git \
+		fetch "$HTTPD_URL"/dumb/repo_packed_branches.git branch2:branch2 &&
+	count_fetches 1 idx two.trace &&
+	count_fetches 1 pack two.trace
 '
 
 test_expect_success 'did not use upload-pack service' '
@@ -322,12 +357,12 @@ test_expect_success 'git client shows text/plain with a charset' '
 	grep "this is the error message" stderr
 '
 
-test_expect_success 'http error messages are reencoded' '
+test_expect_success ICONV 'http error messages are reencoded' '
 	test_must_fail git clone "$HTTPD_URL/error/utf16" 2>stderr &&
 	grep "this is the error message" stderr
 '
 
-test_expect_success 'reencoding is robust to whitespace oddities' '
+test_expect_success ICONV 'reencoding is robust to whitespace oddities' '
 	test_must_fail git clone "$HTTPD_URL/error/odd-spacing" 2>stderr &&
 	grep "this is the error message" stderr
 '
@@ -483,6 +518,16 @@ test_expect_success 'fetching via http alternates works' '
 	git -C "$child" update-server-info &&
 
 	git -c http.followredirects=true clone "$HTTPD_URL/dumb/alt-child.git"
+'
+
+test_expect_success 'dumb http can fetch index v1' '
+	server=$HTTPD_DOCUMENT_ROOT_PATH/idx-v1.git &&
+	git init --bare "$server" &&
+	git -C "$server" --work-tree=. commit --allow-empty -m foo &&
+	git -C "$server" -c pack.indexVersion=1 gc &&
+
+	git clone "$HTTPD_URL/dumb/idx-v1.git" &&
+	git -C idx-v1 fsck
 '
 
 test_done

@@ -5,7 +5,6 @@
 
 test_description='git status'
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 . "$TEST_DIRECTORY"/lib-terminal.sh
 
@@ -419,14 +418,19 @@ Changes not staged for commit:
 Untracked files not listed (use -u option to show untracked files)
 EOF
 	git status -uno >output &&
+	test_cmp expect output &&
+	git status -ufalse >output &&
 	test_cmp expect output
 '
 
-test_expect_success 'status (status.showUntrackedFiles no)' '
-	test_config status.showuntrackedfiles no &&
-	git status >output &&
-	test_cmp expect output
-'
+for no in no false 0
+do
+	test_expect_success "status (status.showUntrackedFiles $no)" '
+		test_config status.showuntrackedfiles "$no" &&
+		git status >output &&
+		test_cmp expect output
+	'
+done
 
 test_expect_success 'status -uno (advice.statusHints false)' '
 	cat >expect <<EOF &&
@@ -488,14 +492,21 @@ Untracked files:
 
 EOF
 	git status -unormal >output &&
+	test_cmp expect output &&
+	git status -utrue >output &&
+	test_cmp expect output &&
+	git status -uyes >output &&
 	test_cmp expect output
 '
 
-test_expect_success 'status (status.showUntrackedFiles normal)' '
-	test_config status.showuntrackedfiles normal &&
-	git status >output &&
-	test_cmp expect output
-'
+for normal in normal true 1
+do
+	test_expect_success "status (status.showUntrackedFiles $normal)" '
+		test_config status.showuntrackedfiles $normal &&
+		git status >output &&
+		test_cmp expect output
+	'
+done
 
 cat >expect <<EOF
  M dir1/modified
@@ -1403,7 +1414,9 @@ test_expect_success "status (core.commentchar with submodule summary)" '
 
 test_expect_success "status (core.commentchar with two chars with submodule summary)" '
 	test_config core.commentchar ";;" &&
-	test_must_fail git -c status.displayCommentPrefix=true status
+	sed "s/^/;/" <expect >expect.double &&
+	git -c status.displayCommentPrefix=true status >output &&
+	test_cmp expect.double output
 '
 
 test_expect_success "--ignore-submodules=all suppresses submodule summary" '
@@ -1686,7 +1699,7 @@ test_expect_success 'setup slow status advice' '
 		EOF
 		git add .gitignore &&
 		git commit -m "Add .gitignore" &&
-		git config advice.statusuoption true
+		git config set advice.statusuoption true
 	)
 '
 

@@ -2,7 +2,6 @@
 
 test_description='verbose commit template'
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 
 write_script "check-for-diff" <<\EOF &&
@@ -98,6 +97,16 @@ test_expect_success 'verbose diff is stripped out with set core.commentChar' '
 		export GIT_EDITOR &&
 		test_must_fail git -c core.commentchar=";" commit -a -v 2>err
 	) &&
+	test_grep "Aborting commit due to empty commit message." err
+'
+
+test_expect_success 'verbose diff is stripped with multi-byte comment char' '
+	(
+		GIT_EDITOR=cat &&
+		export GIT_EDITOR &&
+		test_must_fail git -c core.commentchar="foo>" commit -a -v >out 2>err
+	) &&
+	grep "^foo> " out &&
 	test_grep "Aborting commit due to empty commit message." err
 '
 

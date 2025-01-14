@@ -7,7 +7,6 @@ test_description='Test special whitespace in diff engine.
 
 '
 
-TEST_PASSES_SANITIZE_LEAK=true
 . ./test-lib.sh
 . "$TEST_DIRECTORY"/lib-diff.sh
 
@@ -1182,6 +1181,15 @@ test_expect_success 'detect moved code, complete file' '
 	EOF
 
 	test_cmp expected actual
+'
+
+test_expect_success '--color-moved with --no-ext-diff' '
+	test_config color.diff.oldMoved "yellow" &&
+	test_config color.diff.newMoved "blue" &&
+	args="--color --color-moved=zebra --no-renames HEAD" &&
+	git diff $args >expect &&
+	git -c diff.external=echo diff --no-ext-diff $args >actual &&
+	test_cmp expect actual
 '
 
 test_expect_success 'detect malicious moved code, inside file' '

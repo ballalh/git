@@ -1,6 +1,7 @@
 #!/bin/sh
 
 test_description='log --grep/--author/--regexp-ignore-case/-S/-G'
+
 . ./test-lib.sh
 
 test_log () {

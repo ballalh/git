@@ -1,6 +1,7 @@
 #!/bin/sh
 
 test_description='commit graph'
+
 . ./test-lib.sh
 . "$TEST_DIRECTORY"/lib-chunk.sh
 

@@ -1,3 +1,6 @@
+#define USE_THE_REPOSITORY_VARIABLE
+#define DISABLE_SIGN_COMPARE_WARNINGS
+
 #include "git-compat-util.h"
 #include "gettext.h"
 #include "config.h"
@@ -7,8 +10,6 @@
 #include "xdiff-interface.h"
 #include "xdiff/xtypes.h"
 #include "xdiff/xdiffi.h"
-#include "xdiff/xemit.h"
-#include "xdiff/xmacros.h"
 #include "xdiff/xutils.h"
 
 struct xdiff_emit_state {
@@ -307,6 +308,22 @@ int xdiff_compare_lines(const char *l1, long s1,
 	return xdl_recmatch(l1, s1, l2, s2, flags);
 }
 
+int parse_conflict_style_name(const char *value)
+{
+	if (!strcmp(value, "diff3"))
+		return XDL_MERGE_DIFF3;
+	else if (!strcmp(value, "zdiff3"))
+		return XDL_MERGE_ZEALOUS_DIFF3;
+	else if (!strcmp(value, "merge"))
+		return 0;
+	/*
+	 * Please update _git_checkout() in git-completion.bash when
+	 * you add new merge config
+	 */
+	else
+		return -1;
+}
+
 int git_xmerge_style = -1;
 
 int git_xmerge_config(const char *var, const char *value,
@@ -315,17 +332,8 @@ int git_xmerge_config(const char *var, const char *value,
 	if (!strcmp(var, "merge.conflictstyle")) {
 		if (!value)
 			return config_error_nonbool(var);
-		if (!strcmp(value, "diff3"))
-			git_xmerge_style = XDL_MERGE_DIFF3;
-		else if (!strcmp(value, "zdiff3"))
-			git_xmerge_style = XDL_MERGE_ZEALOUS_DIFF3;
-		else if (!strcmp(value, "merge"))
-			git_xmerge_style = 0;
-		/*
-		 * Please update _git_checkout() in
-		 * git-completion.bash when you add new merge config
-		 */
-		else
+		git_xmerge_style = parse_conflict_style_name(value);
+		if (git_xmerge_style == -1)
 			return error(_("unknown style '%s' given for '%s'"),
 				     value, var);
 		return 0;

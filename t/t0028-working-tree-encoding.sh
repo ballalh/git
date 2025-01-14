@@ -5,12 +5,17 @@ test_description='working-tree-encoding conversion via gitattributes'
 GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME=main
 export GIT_TEST_DEFAULT_INITIAL_BRANCH_NAME
 
-TEST_PASSES_SANITIZE_LEAK=true
 TEST_CREATE_REPO_NO_TEMPLATE=1
 . ./test-lib.sh
 . "$TEST_DIRECTORY/lib-encoding.sh"
 
 GIT_TRACE_WORKING_TREE_ENCODING=1 && export GIT_TRACE_WORKING_TREE_ENCODING
+
+if ! test_have_prereq ICONV
+then
+	skip_all='skipping working tree encoding tests; iconv not available'
+	test_done
+fi
 
 test_expect_success 'setup test files' '
 	git config core.eol lf &&
@@ -131,8 +136,8 @@ do
 		test_when_finished "rm -f crlf.utf${i}.raw lf.utf${i}.raw" &&
 		test_when_finished "git reset --hard HEAD^" &&
 
-		cat lf.utf8.raw | write_utf${i} >lf.utf${i}.raw &&
-		cat crlf.utf8.raw | write_utf${i} >crlf.utf${i}.raw &&
+		write_utf${i} <lf.utf8.raw >lf.utf${i}.raw &&
+		write_utf${i} <crlf.utf8.raw >crlf.utf${i}.raw &&
 		cp crlf.utf${i}.raw eol.utf${i} &&
 
 		cat >expectIndexLF <<-EOF &&
